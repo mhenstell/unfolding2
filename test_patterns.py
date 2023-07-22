@@ -8,9 +8,9 @@ from util import COLOR_BLACK, COLOR_LOWLIGHT
 FPS = 5
 
 # Advatek setup
-target_ip = '192.168.0.50'
+target_ip = '255.255.255.255'
 packet_size = 510
-DMX_UNIVERSES = 8
+DMX_UNIVERSES = range(0, 8)
 
 DIVISOR = 7
 
@@ -36,11 +36,9 @@ LED_SPACING = ((1 / 60) * 1000) / DIVISOR
 width = radius * 2
 height = radius * 2
 
-
 # @receiver.listen_on()  # listens on universe 1
 def callback(data, universe):  # packet type: sacn.DataPacket
     pass
-
 
 def pattern_vert(ticks):
     output = [ COLOR_BLACK for _ in range(LEDS_PER_PANEL)]
@@ -95,9 +93,9 @@ if __name__ == "__main__":
     running = True
 
     senders = []
-    for universe in range(DMX_UNIVERSES):
+    for universe in DMX_UNIVERSES:
         senders.append(StupidArtnet(target_ip, universe, packet_size, 30, True, True))
-        senders[universe].start()
+        senders[universe - DMX_UNIVERSES[0]].start()
 
     done = False
 
@@ -111,13 +109,9 @@ if __name__ == "__main__":
                 running = False
 
         
-
-# 
         # led_data = pattern_vert(ticks)
         led_data = pattern_horiz(ticks)
         # led_data = pattern_color(ticks)
-
-
 
 
         # Draw the pentagons
