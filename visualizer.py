@@ -3,7 +3,7 @@ import pygame
 import json
 import math
 from stupidArtnet import StupidArtnetServer
-import itertools
+from util import draw_pentagon, draw_leds, draw_edge_strips, grouper
 
 panels = []
 
@@ -45,143 +45,47 @@ CHANNELS_PER_HALF = LEDS_PER_HALF * 3
 CHANNELS_PER_10_FACES = LEDS_PER_PANEL * 10 * 3
 strip_lens = [29, 53, 77, 89, 95, 101, 107, 113, 29, 53, 77, 89, 95, 101, 107, 113]
 
+LEDS_PER_EDGE_STRIP = 42 * 5 # 42 LEDs per edge, five edges per strip
 
 # led_data = [ (0, 0, 0) for _ in range(CHANNELS_PER_10_FACES)]
 
-DMX_UNIVERSES = range(0, 80)
-
-def grouper(iterable, n, fillvalue=None):
-    args = [iter(iterable)] * n
-    return list(itertools.zip_longest(fillvalue=fillvalue, *args))
-
-def get_led_pos_inv(center):
-    output = []
-    for strip in range(0, 16):
-
-        if strip in range(0, 8):
-            xpos =  center[0] - ((7 - strip) * WINDOW_STEP_X) - WINDOW_CENTER_OFFSET_X
-        else:
-            xpos =  center[0] + ((15 - strip) * WINDOW_STEP_X) + WINDOW_CENTER_OFFSET_X
-
-        for led in range(strip_lens[strip]):
-            if strip == 0:
-                window_ypos = center[1] + WINDOW_CENTER_OFFSET_Y
-            elif strip == 1:
-                window_ypos = center[1] + WINDOW_CENTER_OFFSET_Y + (WINDOW_STEP_Y * 3)
-            elif strip == 2:
-                window_ypos = center[1] + WINDOW_CENTER_OFFSET_Y + (WINDOW_STEP_Y * 7)
-            elif strip < 8:
-                window_ypos = center[1] + WINDOW_CENTER_OFFSET_Y + (WINDOW_STEP_Y * 8)
-            elif strip == 8:
-                window_ypos = center[1] + WINDOW_CENTER_OFFSET_Y
-            elif strip == 9:
-                window_ypos = center[1] + WINDOW_CENTER_OFFSET_Y + (WINDOW_STEP_Y * 3)
-            elif strip == 10:
-                window_ypos = center[1] + WINDOW_CENTER_OFFSET_Y + (WINDOW_STEP_Y * 7)
-            elif strip >= 11:
-                window_ypos = center[1] + WINDOW_CENTER_OFFSET_Y + (WINDOW_STEP_Y * 8)
-
-            start_ypos = window_ypos + (LED_SPACING * 2)
-            ypos = start_ypos - (LED_SPACING * led)
-            output .append((xpos, ypos))
-  
-    return output
-
-def get_led_pos(center):
-    output = []
-    for strip in range(0, 16):
-        if strip in range(0, 8):
-            xpos = center[0] + ((8 - strip) * WINDOW_STEP_X) - WINDOW_CENTER_OFFSET_X
-        else:
-            xpos = center[0] - ((15 - strip) * WINDOW_STEP_X) - WINDOW_CENTER_OFFSET_X
-
-        for led in range(strip_lens[strip]):
-            if strip == 0:
-                window_ypos = center[1] - WINDOW_CENTER_OFFSET_Y
-            elif strip == 1:
-                window_ypos = center[1] - WINDOW_CENTER_OFFSET_Y - (WINDOW_STEP_Y * 3)
-            elif strip == 2:
-                window_ypos = center[1] - WINDOW_CENTER_OFFSET_Y - (WINDOW_STEP_Y * 7)
-            elif strip < 8:
-                window_ypos = center[1] - WINDOW_CENTER_OFFSET_Y - (WINDOW_STEP_Y * 8)
-            elif strip == 8:
-                window_ypos = center[1] - WINDOW_CENTER_OFFSET_Y
-            elif strip == 9:
-                window_ypos = center[1] - WINDOW_CENTER_OFFSET_Y - (WINDOW_STEP_Y * 3)
-            elif strip == 10:
-                window_ypos = center[1] - WINDOW_CENTER_OFFSET_Y - (WINDOW_STEP_Y * 7)
-            elif strip >= 11:
-                window_ypos = center[1] - WINDOW_CENTER_OFFSET_Y - (WINDOW_STEP_Y * 8)
-
-            start_ypos = window_ypos - (LED_SPACING * 2)
-            ypos = start_ypos + (LED_SPACING * led)
-            output.append((xpos, ypos))
-    return output
-
-def draw_pentagon(surface, radius, center, inv=False):
-
-    c1 = 0.25 * (math.sqrt(5) - 1)
-    c2 = 0.25 * (math.sqrt(5) + 1)
-    s1 = 0.25 * (math.sqrt(10 + 2 * (math.sqrt(5))))
-    s2 = 0.25 * (math.sqrt(10 - 2 * (math.sqrt(5))))
-
-    inv_mult = -1 if inv is True else 1
-    verticies = [ (0, 1), (s1, c1), (s2, -c2), (-s2, -c2), (-s1, c1) ]
-    verticies = [ ( x, y * inv_mult ) for x, y in verticies ]
-    verticies = [ ( ( x * radius ) + center[0], ( y * radius ) + center[1] ) for x, y in verticies]
-
-    pygame.draw.lines(surface, "white", True, verticies)
-    
-    pygame.draw.circle(surface, COLOR_LOWLIGHT, center, 2)
-    pygame.draw.line(surface, COLOR_LOWLIGHT, (center[0] - radius/2, center[1]), (center[0] + radius/2, center[1]), 1)
-
-def draw_leds(surface, center, colors, inv=False):
-    if inv:
-        led_positions = get_led_pos_inv(center)
-    else:
-        led_positions = get_led_pos(center)
-
-    for idx, led in enumerate(led_positions):
-        color = colors[idx]
-        if color[2] == None:
-            continue
-        pygame.draw.circle(surface, color, led, 1)
-    # return led_positions
-
-def pattern_test():
-    output = [ COLOR_LOWLIGHT for _ in range(LEDS_PER_PANEL * 10)]
-    target = int(pygame.time.get_ticks() / 10)
-    output[target] = (255, 255, 255)
-
-    return output
-
-# @receiver.listen_on()  # listens on universe 1
-def callback(data, universe):  # packet type: sacn.DataPacket
-    # print(f"Received: {packet.dmxData}")  # print the received DMX data
-    # universe = packet.universe
-    # print(f"Universe: {universe}")
-    # slice_start = (universe - 1) * LEDS_PER_HALF
-    # slice_end = slice_start + LEDS_PER_HALF
-    # print(f"Slice: {slice_start}:{slice_end}")
-    # print(f"Total slice: {slice_end - slice_start}")
-    # print(f"Received total: {len(packet.dmxData)}")
-    # led_data[slice_start:slice_end] = packet.dmxData
-
-    # print(f"Received {len(data)} bytes")
-    pass
+DMX_UNIVERSES_PENTAGONS = range(0, 90) # Using DMX universes 0 - 79 for the pentagons
+# DMX_UNIVERSES_EDGES = range(100, 110) # Using DMX universes 100 - 109 for the edges (two universes for each edge strip)
 
 def check_dmx(server):
-    output = [ COLOR_LOWLIGHT for _ in range(LEDS_PER_PANEL * 10)]
-    for universe in DMX_UNIVERSES:
+    pentagon_output = [ COLOR_LOWLIGHT for _ in range(LEDS_PER_PANEL * 10)]
+    edge_output = [ COLOR_LOWLIGHT for _ in range(LEDS_PER_PANEL * 10)]
+
+    for universe in range(0, 80):
         buf = server.get_buffer(universe)
 
         if len(buf) > 0:
             buf = grouper(buf, 3)
             start = universe * 170
             end = start + 170
-            output[ start : end ] = buf
+            
+            if universe < 80:
+                pentagon_output[ start : end ] = buf
+            else:
+                edge_output[ start : end ] = buf
 
-    return output
+    return pentagon_output, edge_output 
+
+# def check_dmx_edges(server):
+
+#     output = [ (255, 0, 0) for _ in range(LEDS_PER_EDGE_STRIP * 5)]
+
+#     for universe in DMX_UNIVERSES_EDGES:
+#         print(f"getting universe {universe}")
+#         buf = server.get_buffer(universe)
+
+#         if len(buf) > 0:
+#             buf = grouper(buf, 3)
+#             start = universe * 170
+#             end = start + 170
+#             output[ start : end ] = buf
+
+#     return output
 
 # Set initial values
 radius = 1191.844 / DIVISOR
@@ -199,9 +103,13 @@ else:
 clock = pygame.time.Clock()
 running = True
 
+# Start artnet listeners
 artnet = StupidArtnetServer()
-artnet_listeners = [ artnet.register_listener(x, callback_function=callback) for x in DMX_UNIVERSES ]
+artnet_listeners = [ artnet.register_listener(x) for x in DMX_UNIVERSES_PENTAGONS ]
 print(f"Registered {len(artnet_listeners)} listeners")
+
+# artnet_edge_listeners = [ artnet.register_listener(x) for x in DMX_UNIVERSES_EDGES ]
+# print(f"Registered {len(artnet_edge_listeners)} listeners for the edge strips")
 
 done = False    
 
@@ -215,23 +123,31 @@ while running:
     # fill the screen with a color to wipe away anything from last frame
     screen.fill("black")
 
-    led_data = check_dmx(artnet)
+    led_data, edge_colors = check_dmx(artnet)
+    
+    # edge_colors = check_dmx_edges(artnet)
 
     led_positions = []
 
     for p in range(0, 10, 2):
-        center = (radius + (xstep * p), y_lower)
-        draw_pentagon(screen, radius, center, True)
+        center_lower = (radius + (xstep * p), y_lower)
+        draw_pentagon(screen, radius, center_lower, True)
 
         colors = led_data[ (p * LEDS_PER_PANEL) : (p * LEDS_PER_PANEL) + LEDS_PER_PANEL ]
-        pos = draw_leds(screen, center, colors, True)
+        pos = draw_leds(screen, center_lower, colors, strip_lens, WINDOW_STEP_X, WINDOW_STEP_Y, WINDOW_CENTER_OFFSET_X, WINDOW_CENTER_OFFSET_Y, LED_SPACING, True)
         # led_positions.extend(pos)
 
-        center = (radius + (xstep * (p + 1)), y_upper)
-        draw_pentagon(screen, radius, center, False)
+        center_upper = (radius + (xstep * (p + 1)), y_upper)
+        draw_pentagon(screen, radius, center_upper, False)
         
         colors = led_data[ ((p + 1) * LEDS_PER_PANEL) : ((p + 1) * LEDS_PER_PANEL) + LEDS_PER_PANEL ]
-        pos = draw_leds(screen, center, colors, False)
+        pos = draw_leds(screen, center_upper, colors, strip_lens, WINDOW_STEP_X, WINDOW_STEP_Y, WINDOW_CENTER_OFFSET_X, WINDOW_CENTER_OFFSET_Y, LED_SPACING, False)
+
+        # print("color range:")
+        # print(f"{((p//2) * LEDS_PER_EDGE_STRIP)} : {((p//2) * LEDS_PER_EDGE_STRIP) + LEDS_PER_EDGE_STRIP} out of maximum {len(edge_colors)}")
+        colors = edge_colors[ ((p//2) * LEDS_PER_EDGE_STRIP) : ((p//2) * LEDS_PER_EDGE_STRIP) + LEDS_PER_EDGE_STRIP ]
+        edge_pos = draw_edge_strips(screen, radius, center_lower, center_upper, colors)
+
         # led_positions.extend(pos)
 
     # Write out the normalized positions of each LED
@@ -255,7 +171,8 @@ while running:
 
 # optional: if multicast was previously joined
 print("Leaving DMX universes")
-for listener in artnet_listeners:
+for listener in artnet_pentagon_listeners:
     del listener
-
+for listener in artnet_edge_listeners:
+    del listener
 pygame.quit()
