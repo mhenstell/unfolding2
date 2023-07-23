@@ -8,8 +8,8 @@ PACKET_SIZE = 510
 COLOR_LOWLIGHT = (50, 50, 50)
 COLOR_BLACK = (0, 0, 0)
 
-def led_to_packet(led_data, universe):
-    start = universe * 170
+def led_to_packet(led_data, universe, start_universe=0):
+    start = (universe * 170) - (start_universe * 170)
     end = start + 170
     leds = led_data[start:end]
     return [i for sub in leds for i in sub]
@@ -17,13 +17,15 @@ def led_to_packet(led_data, universe):
 def send_dmx(led_data, senders, dmx_universes):
     for universe in dmx_universes:
         # print(f"Sending universe {universe}")
-        packet = led_to_packet(led_data, universe)
-
+        start_universe = dmx_universes[0]
+        packet = led_to_packet(led_data, universe, start_universe)
+        # print(packet)
         # Pad out the last packet
-        if len(packet) != PACKET_SIZE:
+        if len(packet) < PACKET_SIZE:
             packet += [ 0 for _ in range(PACKET_SIZE - len(packet))]
 
         senders[universe - dmx_universes[0]].set(packet)
+        # senders[universe - dmx_universes[0]].show()
 
 def get_led_pos_inv(center, strip_lens, window_step_x, window_step_y, window_center_offset_x, window_center_offset_y, led_spacing):
     output = []
@@ -181,3 +183,66 @@ def get_interpolated_points(start_point, end_point, num_points):
 def grouper(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return list(itertools.zip_longest(fillvalue=fillvalue, *args))
+
+def normalize_leds(led_positions, output_filename):
+    # print(led_positions)
+    print(len(led_positions))
+    # Write out the normalized positions of each LED
+    max_x = max(p[0] for p in led_positions)
+    max_y = max(p[1] for p in led_positions)
+    min_x = min(p[0] for p in led_positions)
+    min_y = min(p[1] for p in led_positions)
+
+    normalized = [ ( led[0] / max_x, led[1] / max_y ) for led in led_positions ]
+    import json
+    with open(output_filename, "w") as outfile:
+        json.dump(normalized, outfile, indent=2)
+
+
+
+
+def uv_to_pixel(uv_point, w, h):
+    x = round((uv_point[0] * (w - 10)) + 5)
+    y = round((uv_point[1] * (h - 10)) + 5)
+    return (y, x)
+
+def project_cylinder(points, width, height, frame):
+    uv_coords = pixels_to_uv_cylinder(points)
+
+    max_u = max([p[0] for p in uv_coords])
+    max_v = max([p[1] for p in uv_coords])
+    min_u = min([p[0] for p in uv_coords])
+    min_v = min([p[1] for p in uv_coords])
+
+    pixels = [uv_to_pixel(p, width, height) for p in uv_coords]
+    # pixels = [uv_to_pixel(p, 360, 160) for p in uv_coords]
+
+    # OpenCV uses BGR :( pixel order must be reversed
+    led_data = tuple([frame[p][::-1].tolist() for p in pixels])
+
+    return led_data
+
+def pixels_to_uv_cylinder(points):
+    zmax = max([p[2] for p in points])
+    zmin = min([p[2] for p in points])
+
+    output = []
+    for point in points:
+        x, y, z = point[0], point[1], point[2]
+
+        xc = x / (math.sqrt(x**2 + y**2))
+        yc = y / (math.sqrt(x**2 + y**2))
+        zc = z
+
+        theta = math.atan2(yc, xc)
+
+        theta_n = 2 * (theta / (math.pi * 2))
+        z_n = 1 - (z - zmin) / (zmax - zmin)
+
+        if theta_n <= 0:
+            coord_uv = (theta_n + 1, z_n)
+        else:
+            coord_uv = (1 - theta_n, z_n)
+
+        output.append(coord_uv)
+    return output
