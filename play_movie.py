@@ -7,6 +7,8 @@ import sys
 import math
 from stupidArtnet import StupidArtnet, StupidArtnetServer
 
+from util import project_cylinder
+
 # Defines
 PANELS = range(10)
 DMX_UNIVERSES = range(0, len(PANELS) * 8)
@@ -18,12 +20,12 @@ CHANNELS_PER_HALF = LEDS_PER_HALF * 3
 CHANNELS_PER_10_FACES = LEDS_PER_PANEL * 10 * 3
 
 # Advatek setup
-target_ip = '255.255.255.255'
+target_ip = '127.0.0.1'
 packet_size = 510
 
 senders = []
 for universe in DMX_UNIVERSES:
-    senders.append(StupidArtnet(target_ip, universe, packet_size, 30, True, True))
+    senders.append(StupidArtnet(target_ip, universe, packet_size, 15, True, True))
     senders[universe].start()
 
 led_data = [ (0, 0, 0) for _ in range(CHANNELS_PER_10_FACES)]
@@ -67,53 +69,7 @@ def led_to_packet(led_data, universe):
     leds = led_data[start:end]
     return [i for sub in leds for i in sub]
 
-def uv_to_pixel(uv_point, w, h):
-    x = round((uv_point[0] * (w - 10)) + 5)
-    y = round((uv_point[1] * (h - 10)) + 5)
-    return (y, x)
-
-def pixels_to_uv_cylinder(points):
-    zmax = max([p[2] for p in points])
-    zmin = min([p[2] for p in points])
-
-    output = []
-    for point in points:
-        x, y, z = point[0], point[1], point[2]
-
-        xc = x / (math.sqrt(x**2 + y**2))
-        yc = y / (math.sqrt(x**2 + y**2))
-        zc = z
-
-        theta = math.atan2(yc, xc)
-
-        theta_n = 2 * (theta / (math.pi * 2))
-        z_n = 1 - (z - zmin) / (zmax - zmin)
-
-        if theta_n <= 0:
-            coord_uv = (theta_n + 1, z_n)
-        else:
-            coord_uv = (1 - theta_n, z_n)
-
-        output.append(coord_uv)
-    return output
-
-def project_cylinder(points):
-    uv_coords = pixels_to_uv_cylinder(points_3d)
-
-    max_u = max([p[0] for p in uv_coords])
-    max_v = max([p[1] for p in uv_coords])
-    min_u = min([p[0] for p in uv_coords])
-    min_v = min([p[1] for p in uv_coords])
-
-    pixels = [uv_to_pixel(p, width, height) for p in uv_coords]
-    # pixels = [uv_to_pixel(p, 360, 160) for p in uv_coords]
-
-    # OpenCV uses BGR :( pixel order must be reversed
-    led_data = tuple([frame[p][::-1].tolist() for p in pixels])
-
-    return led_data
-
-def project_straight(points):
+def project_straight(points, frame):
     # Sample pixels directly from frame (no projection)
     pixels = [uv_to_pixel(p) for p in points]
     
@@ -138,7 +94,7 @@ while (cap.isOpened()):
         # led_data = project_straight(points_2d)
 
         points_3d = [point[1] for point in led_pos_2d_3d]
-        led_data = project_cylinder(points_3d)
+        led_data = project_cylinder(points_3d, width, height, frame)
 
         for universe in DMX_UNIVERSES:
             # print(f"Sending universe {universe}")
