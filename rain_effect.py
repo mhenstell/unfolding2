@@ -3,15 +3,32 @@ import pygame
 import colorsys
 import time
 import math
+from stupidArtnet import StupidArtnet, StupidArtnetServer
+from util import led_to_packet, send_dmx
 
+# Advatek setup
+# Simulator
+target_ip = '255.255.255.255'
+# Actual advatek
+# target_ip = '192.168.0.50'
+
+packet_size = 510
+DMX_UNIVERSES = range(0, 80)
+
+# Pygame window
 height = 620
 width = 2000
 
+# Strip constants
 NUM_PANEL_STRIPS = 16 * 20
 LEDS_PER_PANEL_STRIP = 120
 PIXELS_PER_CHAR = 6
 CHARS_PER_PANEL_STRIP = LEDS_PER_PANEL_STRIP // PIXELS_PER_CHAR
+NUM_PANELS = 10
+LEDS_PER_PANEL = 1328
+STRIPS_PER_PANEL = 16
 
+# Color constants
 HUE_GREEN = 120
 LEAD_SAT = 190 # saturations that still look green to me range from 160-255
 LEAD_VAL = 255
@@ -28,9 +45,13 @@ MIN_RESPAWN_DELAY = 0
 
 FPS = 10
 
-leds = [[(0, 0, 0) for _ in range(LEDS_PER_PANEL_STRIP)] for _ in range(NUM_PANEL_STRIPS)]
+led_data = [[(0, 0, 0) for _ in range(LEDS_PER_PANEL_STRIP)] for _ in range(NUM_PANEL_STRIPS)]
 strand_avg_decay = [random.randrange(MIN_DECAY, MAX_DECAY + 1) for _ in range(NUM_PANEL_STRIPS)]
 lit_char = [random.randrange(0, CHARS_PER_PANEL_STRIP) for _ in range(NUM_PANEL_STRIPS)]
+
+# lit_char = [0] * CHARS_PER_PANEL_STRIP * NUM_PANEL_STRIPS
+
+strip_lens = [29, 53, 77, 89, 95, 101, 107, 113, 29, 53, 77, 89, 95, 101, 107, 113]
 
 
 def hsv2rgb(h,s,v):
@@ -40,27 +61,27 @@ def hsv2rgb(h,s,v):
     return t
 
 def fade_pixel_by(strand, pixel, value):
-    old = leds[strand][pixel]
+    old = led_data[strand][pixel]
     r = max(0, old[0] - value)
     g = max(0, old[1] - value)
     b = max(0, old[2] - value)
-    leds[strand][pixel] = (r, g, b)
+    led_data[strand][pixel] = (r, g, b)
 
 def fade_char_by(strand, char, value):
     for pixel in range(PIXELS_PER_CHAR - 1):
         fade_pixel_by(strand, char * PIXELS_PER_CHAR + pixel, value)
 
 def set_pixel(strand, pixel, color):
-    leds[strand][pixel] = color
+    led_data[strand][pixel] = color
 
 def draw_leds(surface):
-    for strip_idx, strip in enumerate(leds):
+    for strip_idx, strip in enumerate(led_data):
       x = (strip_idx * 15) + 5
 
       for led_idx, led in enumerate(strip):
             y = (led_idx * 5) + 5
 
-            color = leds[strip_idx][led_idx]
+            color = led_data[strip_idx][led_idx]
             pygame.draw.circle(surface, color, (x, y), 1)
 
 def set_char_color(strand, char, color):
@@ -91,32 +112,63 @@ def make_it_rain(ticks):
         lit_char[strand] += 1
         if lit_char[strand] == CHARS_PER_PANEL_STRIP + 5:
             lit_char[strand] = random.randrange(MAX_RESPAWN_DELAY, MIN_RESPAWN_DELAY)
-    
 
-# Initialize pygame
-pygame.init()
-screen = pygame.display.set_mode((width, height))
-clock = pygame.time.Clock()
-running = True
-ticks = 0
+def crop_leds(data):
+    # This is a total hack to crop the crop the pixels because
+    # we don't have as many output pixels as we do in the pattern here
+    # also I needed to flip some of them upside down because I'm bad at math
+    # please don't look at this
+    output = []
 
-while running:
-    # poll for events
-    # pygame.QUIT event means the user clicked X to close your window
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
-    # fill the screen with a color to wipe away anything from last frame
-    screen.fill("black")
-
-    make_it_rain(ticks)
-    draw_leds(screen)
+    for panel in range(NUM_PANELS):
+        for strip in range(STRIPS_PER_PANEL):
+            for led in range(strip_lens[strip]):
+                if panel % 2 == 0:
+                    led = strip_lens[strip] - led
+                pix = data[(STRIPS_PER_PANEL * panel) + strip][led]
+                output.append(pix)
+    return output
 
 
-    pygame.display.flip()
+if __name__ == "__main__":
 
-    clock.tick(FPS)
+    senders = []
+    for universe in DMX_UNIVERSES:
+        senders.append(StupidArtnet(target_ip, universe, packet_size, 30, True, True))
+        senders[universe - DMX_UNIVERSES[0]].start()    
+    print(f"Created {len(senders)} DMX senders")
 
-    ticks += 1
+    # Initialize pygame
+    pygame.init()
+    screen = pygame.display.set_mode((width, height))
+    clock = pygame.time.Clock()
+    running = True
+    ticks = 0
+
+    while running:
+        # poll for events
+        # pygame.QUIT event means the user clicked X to close your window
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        # fill the screen with a color to wipe away anything from last frame
+        screen.fill("black")
+
+        make_it_rain(ticks)
+        draw_leds(screen)
+
+        # Send the DMX data
+        send_dmx(crop_leds(led_data), senders, DMX_UNIVERSES)
+
+        pygame.display.flip()
+
+        clock.tick(FPS)
+
+        ticks += 1
+
+        # optional: if multicast was previously joined
+    print("Leaving DMX universes")
+    for listener in artnet_listeners:
+        del listener
 
