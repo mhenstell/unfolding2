@@ -7,11 +7,13 @@ import sys
 import math
 from stupidArtnet import StupidArtnet, StupidArtnetServer
 
-from util import project_cylinder
+from util import project_cylinder, load_video_file
+from util import uv_to_pixel, send_dmx
 
 # Defines
 PANELS = range(10)
 DMX_UNIVERSES = range(0, len(PANELS) * 8)
+EDGE_DMX_UNIVERSES = range(80, 90)
 
 # LED defines
 LEDS_PER_PANEL = 1328
@@ -24,95 +26,70 @@ target_ip = '127.0.0.1'
 packet_size = 510
 DMX_FPS = 15
 
-senders = []
-for universe in DMX_UNIVERSES:
-    senders.append(StupidArtnet(target_ip, universe, packet_size, DMX_FPS, True, False))
-    senders[universe].start()
 
-led_data = [ (0, 0, 0) for _ in range(CHANNELS_PER_10_FACES)]
-
-# # Load pixel locations
-# with open("leds_2d_normalied.json", "r") as infile:
-#     led_pos_2d_norm = json.load(infile)
-
-# # with open("led_3d_normalized.json", "r") as infile:
-#     # led_pos_3d_norm = json.load(infile)
-
-# with open("led_3d_unnormalized.json", "r") as infile:
-#     led_pos_3d_unnorm = json.load(infile)["panels"]
-
-with open("2d_norm_3d_unnorm_zipped.json", "r") as infile:
-    led_pos_2d_3d = json.load(infile)
-
-# Open video file
-cap = cv2.VideoCapture("fire.mp4")
-
-video_fps = cap.get(cv2.CAP_PROP_FPS),
-total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-print(f"Frames Per second: {video_fps } \nTotal Frames: {total_frames} \n Height: {height} \nWidth: {width}")
-
-def translate(value, leftMin, leftMax, rightMin, rightMax):
-    # Figure out how 'wide' each range is
-    leftSpan = leftMax - leftMin
-    rightSpan = rightMax - rightMin
-
-    # Convert the left range into a 0-1 range (float)
-    valueScaled = float(value - leftMin) / float(leftSpan)
-
-    # Convert the 0-1 range into a value in the right range.
-    return rightMin + (valueScaled * rightSpan)
-
-def led_to_packet(led_data, universe):
-    start = universe * 170
-    end = start + 170
-    leds = led_data[start:end]
-    return [i for sub in leds for i in sub]
-
-def project_straight(points, frame):
+def project_straight(points, frame, width, height):
     # Sample pixels directly from frame (no projection)
-    pixels = [uv_to_pixel(p) for p in points]
+    pixels = [uv_to_pixel(p, width, height) for p in points]
     
     # OpenCV uses BGR :( pixel order must be reversed
     led_data = tuple([frame[p][::-1].tolist() for p in pixels])
     return led_data
 
-while (cap.isOpened()):
 
-    ret, frame = cap.read()
+if __name__ == "__main__":
 
-    if ret == True:
-        cv2.imshow('Frame', frame)
+    # Start pentagonal face DMX senders
+    senders = []
+    for universe in DMX_UNIVERSES:
+        senders.append(StupidArtnet(target_ip, universe, packet_size, DMX_FPS, True, False))
+        senders[universe].start()
 
-        # Random LED pattern (red on bottom, green on top)
-        # for panel in range(0, len(PANELS), 2):
-        #     led_data[panel * LEDS_PER_PANEL : (panel * LEDS_PER_PANEL) + LEDS_PER_PANEL] = [ (random.randint(0, 255), 0, 0) for _ in range(LEDS_PER_PANEL)]
-        #     led_data[(panel + 1) * LEDS_PER_PANEL : ((panel + 1) * LEDS_PER_PANEL) + LEDS_PER_PANEL] = [ (0, random.randint(0, 255), 0) for _ in range(LEDS_PER_PANEL)]
+    # Start edge strip DMX senders
+    # the reason these are separate from the other DMX senders is very important
+    # and I would be happy to tell you just let me answer this call real quick
+    edge_senders = []
+    for universe in EDGE_DMX_UNIVERSES:
+        edge_senders.append(StupidArtnet(target_ip, universe, packet_size, 30, True, True))
+        edge_senders[universe - EDGE_DMX_UNIVERSES[0]].start()
+
+    # Load pixel locations
+    with open("2d_norm_3d_unnorm_zipped.json", "r") as infile:
+        led_pos_2d_3d = json.load(infile)
+
+    with open("edge_positions_normalized.json", "r") as infile:
+        edge_points_2d = json.load(infile)
+    
+    # Load movie frames
+    cap = load_video_file("fire.mp4")
+    width, height = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+    while (cap.isOpened()):
+
+        ret, frame = cap.read()
+
+        if ret == True:
+            cv2.imshow('Frame', frame)
+
+            # Generate colors for the pentagonal faces by running
+            # the 3D points through cylindrical projection
+            points_3d = [point[1] for point in led_pos_2d_3d]
+            pentagon_led_data = project_cylinder(points_3d, width, height, frame)
+            send_dmx(pentagon_led_data, senders, DMX_UNIVERSES)
+
+            # Generate colors for the edge strips by straight 2D projection
+            # super dumb and needs work
+            edge_led_data = project_straight(edge_points_2d, frame, width, height)
+
+            #Send the DMX data
+            send_dmx(edge_led_data, edge_senders, EDGE_DMX_UNIVERSES)
 
 
-        # points_2d = [point[0] for point in led_pos_2d_3d]
-        # led_data = project_straight(points_2d)
-
-        points_3d = [point[1] for point in led_pos_2d_3d]
-        led_data = project_cylinder(points_3d, width, height, frame)
-
-        for universe in DMX_UNIVERSES:
-            # print(f"Sending universe {universe}")
-            packet = led_to_packet(led_data, universe)
-            
-            # Pad out the last packet
-            if len(packet) != packet_size:
-                packet += [ 0 for _ in range(packet_size - len(packet))]
-
-            senders[universe].set(packet)
-
-        # Press Q on keyboard to  exit
-        if cv2.waitKey(25) & 0xFF == ord('q'):
-          break
-    else:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            # Press Q on keyboard to  exit
+            if cv2.waitKey(25) & 0xFF == ord('q'):
+              break
+        else:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
 
-cap.release()
-cv2.destroyAllWindows()
+    cap.release()
+    cv2.destroyAllWindows()

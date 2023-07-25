@@ -1,3 +1,4 @@
+import cv2
 import math
 import pygame
 import itertools
@@ -7,6 +8,18 @@ PACKET_SIZE = 510
 # Color defints
 COLOR_LOWLIGHT = (50, 50, 50)
 COLOR_BLACK = (0, 0, 0)
+
+def load_video_file(filename):
+    # Open video file
+    cap = cv2.VideoCapture(filename)
+
+    video_fps = cap.get(cv2.CAP_PROP_FPS),
+    total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    print(f"Frames Per second: {video_fps } \nTotal Frames: {total_frames} \n Height: {height} \nWidth: {width}")
+
+    return cap
 
 def led_to_packet(led_data, universe, start_universe=0):
     start = (universe * 170) - (start_universe * 170)
@@ -142,7 +155,7 @@ def draw_edge_strips(surface, radius, center_lower, center_upper, colors):
     led_positions.append(get_interpolated_points(edgestrip_verticies_upper_0[0], edgestrip_verticies_upper_0[1], 42))
     led_positions.append(get_interpolated_points(edgestrip_verticies_upper_0[1], edgestrip_verticies_upper_0[2], 42))
 
-    edgestrip_verticies_upper_1 = [ (0, 1), (s1, c1) ]
+    edgestrip_verticies_upper_1 = [ (s1, c1), (0, 1) ]
     edgestrip_verticies_upper_1 = [ ( ( x * radius ) + center_upper[0], ( y * radius ) + center_upper[1] ) for x, y in edgestrip_verticies_upper_1]
     # pygame.draw.circle(surface, "red", edgestrip_verticies_upper_1[1], 3)
 
