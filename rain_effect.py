@@ -8,12 +8,16 @@ from util import led_to_packet, send_dmx
 
 # Advatek setup
 # Simulator
-target_ip = '255.255.255.255'
+target_ip = '127.0.0.1'
+target_ip2 = '127.0.0.1'
+
 # Actual advatek
 # target_ip = '192.168.0.50'
+# target_ip2 = '192.168.0.51'
 
 packet_size = 510
 DMX_UNIVERSES = range(0, 80)
+
 
 # Pygame window
 height = 620
@@ -134,7 +138,10 @@ if __name__ == "__main__":
 
     senders = []
     for universe in DMX_UNIVERSES:
-        senders.append(StupidArtnet(target_ip, universe, packet_size, 30, True, True))
+        if universe < 64:
+            senders.append(StupidArtnet(target_ip, universe, packet_size, 30, True, True))
+        else:
+            senders.append(StupidArtnet(target_ip2, universe, packet_size, 30, True, True))
         senders[universe - DMX_UNIVERSES[0]].start()    
     print(f"Created {len(senders)} DMX senders")
 

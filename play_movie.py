@@ -22,7 +22,14 @@ CHANNELS_PER_HALF = LEDS_PER_HALF * 3
 CHANNELS_PER_10_FACES = LEDS_PER_PANEL * 10 * 3
 
 # Advatek setup
+# Simulator
 target_ip = '127.0.0.1'
+target_ip2 = '127.0.0.1'
+
+# Actual advatek
+# target_ip = '192.168.0.50'
+# target_ip2 = '192.168.0.51'
+
 packet_size = 510
 DMX_FPS = 15
 
@@ -41,7 +48,10 @@ if __name__ == "__main__":
     # Start pentagonal face DMX senders
     senders = []
     for universe in DMX_UNIVERSES:
-        senders.append(StupidArtnet(target_ip, universe, packet_size, DMX_FPS, True, False))
+        if universe < 64:
+            senders.append(StupidArtnet(target_ip, universe, packet_size, DMX_FPS, True, True))
+        else:
+            senders.append(StupidArtnet(target_ip2, universe, packet_size, DMX_FPS, True, True))
         senders[universe].start()
 
     # Start edge strip DMX senders
