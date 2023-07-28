@@ -1,105 +1,96 @@
+import argparse
 import cv2
 import json
-import random
-import itertools
-import time
-import sys
-import math
-from stupidArtnet import StupidArtnet, StupidArtnetServer
 
-from util import project_cylinder, load_video_file
-from util import uv_to_pixel, send_dmx
+from util import project_cylinder, project_straight, load_video_file
+from util import create_artnet_pentagon_senders, create_artnet_edge_senders, send_dmx
 
 # Defines
-PANELS = range(10)
-DMX_UNIVERSES = range(0, len(PANELS) * 8)
-EDGE_DMX_UNIVERSES = range(80, 90)
+DMX_UNIVERSES = range(0, 90)
+EDGE_START_UNIVERSE = 80
 
-# LED defines
-LEDS_PER_PANEL = 1328
-LEDS_PER_HALF = LEDS_PER_PANEL // 2
-CHANNELS_PER_HALF = LEDS_PER_HALF * 3
-CHANNELS_PER_10_FACES = LEDS_PER_PANEL * 10 * 3
+# Output setup
+# Uncomment to use local Simulator
+target_ips = ['127.0.0.1', '127.0.0.1']
 
-# Advatek setup
-# Simulator
-target_ip = '127.0.0.1'
-target_ip2 = '127.0.0.1'
+# Uncomment to send data to two Advateks
+# may throw errors if both are not connected
+# target_ips = ['192.168.0.50', '192.168.0.51']
 
-# Actual advatek
-# target_ip = '192.168.0.50'
-# target_ip2 = '192.168.0.51'
+class MovieAnimation:
+    def __init__(self, path, display_preview=False):
+        self.path = path
+        self.display_preview = display_preview
 
-packet_size = 510
-DMX_FPS = 15
+         # Load pixel locations
+        with open("2d_norm_3d_unnorm_zipped.json", "r") as infile:
+            self.pentagon_led_pos = json.load(infile)
+
+        with open("edge_positions_normalized.json", "r") as infile:
+            self.edge_led_pos = json.load(infile)
+
+         # Load movie frames
+        self.cap = load_video_file(self.path)
+        self.width, self.height = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH), self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
 
-def project_straight(points, frame, width, height):
-    # Sample pixels directly from frame (no projection)
-    pixels = [uv_to_pixel(p, width, height) for p in points]
-    
-    # OpenCV uses BGR :( pixel order must be reversed
-    led_data = tuple([frame[p][::-1].tolist() for p in pixels])
-    return led_data
+    def get_frame(self, ticks=None):
+        """ Reads the video file and returns the next frame of animation.
+            Returns both pentagon and edge data """
+
+        # Read next video frame
+        ret, frame = self.cap.read()
+
+        if ret == True:
+
+            if self.display_preview:
+                cv2.imshow('Frame', frame)
+            
+            # Generate colors for the pentagonal faces by running
+            # the 3D points through cylindrical projection
+            points_3d = [point[1] for point in self.pentagon_led_pos]
+            pentagon_led_data = project_cylinder(points_3d, self.width, self.height, frame)
+            
+            # Generate colors for the edge strips by straight 2D projection
+            # super dumb and needs work
+            edge_led_data = project_straight(self.edge_led_pos, self.width, self.height, frame)
+
+            # Needed to prevent python from crashing for some reason
+            cv2.waitKey(25)
+
+            return pentagon_led_data, edge_led_data
+        else:
+            # Restart movie clip
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        return [], []
+
+    def stop(self):
+        self.cap.release()
+        if self.display_preview:
+            cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
 
-    # Start pentagonal face DMX senders
-    senders = []
-    for universe in DMX_UNIVERSES:
-        if universe < 64:
-            senders.append(StupidArtnet(target_ip, universe, packet_size, DMX_FPS, True, True))
-        else:
-            senders.append(StupidArtnet(target_ip2, universe, packet_size, DMX_FPS, True, True))
-        senders[universe].start()
-
-    # Start edge strip DMX senders
-    # the reason these are separate from the other DMX senders is very important
-    # and I would be happy to tell you just let me answer this call real quick
-    edge_senders = []
-    for universe in EDGE_DMX_UNIVERSES:
-        edge_senders.append(StupidArtnet(target_ip, universe, packet_size, 30, True, True))
-        edge_senders[universe - EDGE_DMX_UNIVERSES[0]].start()
-
-    # Load pixel locations
-    with open("2d_norm_3d_unnorm_zipped.json", "r") as infile:
-        led_pos_2d_3d = json.load(infile)
-
-    with open("edge_positions_normalized.json", "r") as infile:
-        edge_points_2d = json.load(infile)
-    
-    # Load movie frames
-    cap = load_video_file("fire.mp4")
-    width, height = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-
-    while (cap.isOpened()):
-
-        ret, frame = cap.read()
-
-        if ret == True:
-            cv2.imshow('Frame', frame)
-
-            # Generate colors for the pentagonal faces by running
-            # the 3D points through cylindrical projection
-            points_3d = [point[1] for point in led_pos_2d_3d]
-            pentagon_led_data = project_cylinder(points_3d, width, height, frame)
-            send_dmx(pentagon_led_data, senders, DMX_UNIVERSES)
-
-            # Generate colors for the edge strips by straight 2D projection
-            # super dumb and needs work
-            edge_led_data = project_straight(edge_points_2d, frame, width, height)
-
-            #Send the DMX data
-            send_dmx(edge_led_data, edge_senders, EDGE_DMX_UNIVERSES)
+    parser = argparse.ArgumentParser(
+        prog='Unfolding Humanity Video Player',
+        description='This program reverse-projects a video file onto the LEDs on Unfolding Humanity')
+    parser.add_argument('-f', '--filename', default='fire.mp4', help="Filename of the movie to play")
+    parser.add_argument('-p', '--preview', action='store_true', help="Show a 2D preview of the movie")
+    parser.add_argument('--fps', default=15, help="Frames Per Second for the DMX output")
+    args = parser.parse_args()
 
 
-            # Press Q on keyboard to  exit
-            if cv2.waitKey(25) & 0xFF == ord('q'):
-              break
-        else:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    pentagon_senders = create_artnet_pentagon_senders(DMX_UNIVERSES[:EDGE_START_UNIVERSE], target_ips, int(args.fps))
+    edge_senders = create_artnet_edge_senders(DMX_UNIVERSES[EDGE_START_UNIVERSE:], target_ips, int(args.fps))
 
+    movie = MovieAnimation(args.filename, display_preview=args.preview)
+   
+    while True:
+        pentagon_data, edge_data = movie.get_frame()
 
-    cap.release()
-    cv2.destroyAllWindows()
+        if len(pentagon_data):
+            send_dmx(pentagon_data, pentagon_senders, DMX_UNIVERSES[:EDGE_START_UNIVERSE])
+        if len(edge_data):
+            send_dmx(edge_data, edge_senders, DMX_UNIVERSES[EDGE_START_UNIVERSE:])
+        

@@ -2,12 +2,43 @@ import cv2
 import math
 import pygame
 import itertools
+from stupidArtnet import StupidArtnet
 
 PACKET_SIZE = 510
 
 # Color defints
 COLOR_LOWLIGHT = (50, 50, 50)
 COLOR_BLACK = (0, 0, 0)
+
+def create_artnet_pentagon_senders(universes, target_ips, fps):
+    pentagon_senders = []
+
+    # See StupidArtnet()
+    EVEN_PACKET_SIZE = True
+    BROADCAST = True
+    
+    for universe in universes:
+
+        ip_address = target_ips[0] if universe < 64 else target_ips[1]
+
+        pentagon_senders.append(StupidArtnet(ip_address, universe, PACKET_SIZE, fps, EVEN_PACKET_SIZE, BROADCAST))
+        pentagon_senders[universe].start()
+
+    return pentagon_senders
+
+def create_artnet_edge_senders(universes, target_ips, fps):
+    edge_senders = []
+   
+    # See StupidArtnet()
+    EVEN_PACKET_SIZE = True
+    BROADCAST = True
+    ip_address = target_ips[1]
+
+    for universe in universes:
+        sender = StupidArtnet(ip_address, universe, PACKET_SIZE, fps, EVEN_PACKET_SIZE, BROADCAST)
+        edge_senders.append(sender)
+        sender.start()
+    return edge_senders
 
 def load_video_file(filename):
     # Open video file
@@ -211,9 +242,6 @@ def normalize_leds(led_positions, output_filename):
     with open(output_filename, "w") as outfile:
         json.dump(normalized, outfile, indent=2)
 
-
-
-
 def uv_to_pixel(uv_point, w, h):
     x = round((uv_point[0] * (w - 10)) + 5)
     y = round((uv_point[1] * (h - 10)) + 5)
@@ -233,6 +261,15 @@ def project_cylinder(points, width, height, frame):
     # OpenCV uses BGR :( pixel order must be reversed
     led_data = tuple([frame[p][::-1].tolist() for p in pixels])
 
+    return led_data
+
+
+def project_straight(points, width, height, frame):
+    # Sample pixels directly from frame (no projection)
+    pixels = [uv_to_pixel(p, width, height) for p in points]
+    
+    # OpenCV uses BGR :( pixel order must be reversed
+    led_data = tuple([frame[p][::-1].tolist() for p in pixels])
     return led_data
 
 def pixels_to_uv_cylinder(points):
