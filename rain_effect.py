@@ -9,14 +9,16 @@ from util import STRIP_LENS
 
 # Output setup
 # Uncomment to use local Simulator
-target_ips = ['127.0.0.1', '127.0.0.1']
+# target_ips = ['127.0.0.1', '127.0.0.1']
 
 # Uncomment to send data to two Advateks
 # may throw errors if both are not connected
-# target_ips = ['192.168.0.50', '192.168.0.51']
+target_ips = ['192.168.0.50', '192.168.0.51']
+
 
 # Defines
 DMX_UNIVERSES = range(0, 90)
+# DMX_UNIVERSES = range(0, 40)
 EDGE_START_UNIVERSE = 80
 
 # Preview window
@@ -32,11 +34,11 @@ STRIPS_PER_PANEL = 16
 NUM_PANELS = 10
 
 # Color constants
-HUE_GREEN = 120
-LEAD_SAT = 190 # saturations that still look green to me range from 160-255
+HUE_GREEN = 90
+LEAD_SAT = 255 # saturations that still look green to me range from 160-255
 LEAD_VAL = 255
 TRAIL_SAT = 255
-MAX_TRAIL_GREEN_VAL = 128
+MAX_TRAIL_GREEN_VAL = 100
 
 # animation constants
 MIN_DECAY = 2 #// 13/256 is about 5%
@@ -167,7 +169,7 @@ if __name__ == "__main__":
         
          # Send the DMX data
         if len(led_data):
-            led_data = gamma_correction(led_data)
+            # led_data = gamma_correction(led_data)
             send_dmx(led_data, pentagon_senders, DMX_UNIVERSES[:EDGE_START_UNIVERSE])
 
         if args.preview:
@@ -175,4 +177,4 @@ if __name__ == "__main__":
             draw_leds(screen, animation.get_raw_led_data())
             pygame.display.flip()
 
-        clock.tick(args.fps)
+        clock.tick(int(args.fps))
