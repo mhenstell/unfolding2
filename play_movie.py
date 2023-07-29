@@ -33,6 +33,7 @@ class MovieAnimation:
         self.cap = load_video_file(self.path)
         self.width, self.height = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH), self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
+        self.edge_led_data = []
 
     def get_frame(self, ticks=None):
         """ Reads the video file and returns the next frame of animation.
@@ -53,16 +54,20 @@ class MovieAnimation:
             
             # Generate colors for the edge strips by straight 2D projection
             # super dumb and needs work
-            edge_led_data = project_straight(self.edge_led_pos, self.width, self.height, frame)
+            
+            self.edge_led_data = project_straight(self.edge_led_pos, self.width, self.height, frame)
 
             # Needed to prevent python from crashing for some reason
             cv2.waitKey(25)
 
-            return pentagon_led_data, edge_led_data
+            return pentagon_led_data
         else:
             # Restart movie clip
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        return [], []
+        return []
+
+    def get_edge_frame(self, ticks=None):
+        return self.edge_led_data
 
     def stop(self):
         self.cap.release()
@@ -87,8 +92,9 @@ if __name__ == "__main__":
     movie = MovieAnimation(args.filename, display_preview=args.preview)
    
     while True:
-        pentagon_data, edge_data = movie.get_frame()
-
+        pentagon_data = movie.get_frame()
+        edge_data = movie.get_edge_frame()
+        
         if len(pentagon_data):
             send_dmx(pentagon_data, pentagon_senders, DMX_UNIVERSES[:EDGE_START_UNIVERSE])
         if len(edge_data):
