@@ -12,6 +12,8 @@ COLOR_BLACK = (0, 0, 0)
 
 STRIP_LENS = [29, 53, 77, 89, 95, 101, 107, 113, 29, 53, 77, 89, 95, 101, 107, 113]
 
+GAMMA_VALUE = 2.8
+
 def create_artnet_pentagon_senders(universes, target_ips, fps):
     pentagon_senders = []
 
@@ -298,3 +300,31 @@ def pixels_to_uv_cylinder(points):
 
         output.append(coord_uv)
     return output
+
+def gamma_correction(values):
+    """
+    Apply gamma correction to a list of values in the range of 0-255.
+
+    Parameters:
+        values (list): A list of values to be gamma corrected.
+        gamma (float): The gamma value for correction.
+
+    Returns:
+        list: The list of gamma-corrected values in the range of 0-255.
+    """
+    corrected_data = []
+
+    for pixel in values:
+        corrected_pixel = []
+        for channel in pixel:
+            
+            # Normalize the value to the range of 0-1
+            normalized_value = channel / 255.0
+            # Apply gamma correction
+            corrected_value = int((normalized_value ** (1 / GAMMA_VALUE)) * 255.0 + 0.5)
+            # Ensure the corrected value stays within 0-255 range
+            corrected_pixel.append(min(max(corrected_value, 0), 255))
+        
+        corrected_data.append(tuple(corrected_pixel))
+
+    return corrected_data
