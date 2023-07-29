@@ -4,7 +4,7 @@ import colorsys
 import time
 import argparse
 
-from util import create_artnet_pentagon_senders, send_dmx, gamma_correction, swap_blue_green
+from util import create_artnet_pentagon_senders, send_dmx, gamma_correction
 from util import STRIP_LENS
 
 # Output setup
@@ -168,7 +168,6 @@ if __name__ == "__main__":
          # Send the DMX data
         if len(led_data):
             led_data = gamma_correction(led_data)
-            led_data = swap_blue_green(led_data)
             send_dmx(led_data, pentagon_senders, DMX_UNIVERSES[:EDGE_START_UNIVERSE])
 
         if args.preview:
