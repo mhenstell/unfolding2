@@ -328,3 +328,10 @@ def gamma_correction(values):
         corrected_data.append(tuple(corrected_pixel))
 
     return corrected_data
+
+def swap_blue_green(values):
+
+    corrected_data = []
+    for pixel in values:
+        corrected_data.append((pixel[0], pixel[2], pixel[1]))
+    return corrected_data
