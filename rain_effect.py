@@ -117,15 +117,9 @@ class MatrixAnimation:
             self.lit_char[strand] += 1
             if self.lit_char[strand] == CHARS_PER_PANEL_STRIP + 5:
                 self.lit_char[strand] = random.randrange(MAX_RESPAWN_DELAY, MIN_RESPAWN_DELAY) 
-        
-        # Flatten the LED data into a 1D list for output to DMX
-        flat_list = []
-        for panel_strip in self.led_data:
-            for pixel in panel_strip:
-                flat_list.append(pixel)
 
         # Crop the output and invert the bottom panels
-        output = self._crop_leds(flat_list)
+        output = self._crop_leds(self.led_data)
         return output
 
     def get_raw_led_data(self):
