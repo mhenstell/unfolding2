@@ -3,7 +3,7 @@ import cv2
 import json
 
 from util import project_cylinder, project_straight, load_video_file
-from util import create_artnet_pentagon_senders, create_artnet_edge_senders, send_dmx
+from util import create_artnet_pentagon_senders, create_artnet_edge_senders, send_dmx, gamma_correction
 
 # Defines
 DMX_UNIVERSES = range(0, 90)
@@ -94,7 +94,10 @@ if __name__ == "__main__":
     while True:
         pentagon_data = movie.get_frame()
         edge_data = movie.get_edge_frame()
-        
+
+        pentagon_data = gamma_correction(pentagon_data)
+
+
         if len(pentagon_data):
             send_dmx(pentagon_data, pentagon_senders, DMX_UNIVERSES[:EDGE_START_UNIVERSE])
         if len(edge_data):

@@ -12,7 +12,7 @@ COLOR_BLACK = (0, 0, 0)
 
 STRIP_LENS = [29, 53, 77, 89, 95, 101, 107, 113, 29, 53, 77, 89, 95, 101, 107, 113]
 
-GAMMA_VALUE = 2.8
+GAMMA_VALUE = 0.5
 
 def create_artnet_pentagon_senders(universes, target_ips, fps):
     pentagon_senders = []
@@ -24,6 +24,8 @@ def create_artnet_pentagon_senders(universes, target_ips, fps):
     for universe in universes:
 
         ip_address = target_ips[0] if universe < 64 else target_ips[1]
+
+        # if universe >= 64: break # TODO REMOVE
 
         pentagon_senders.append(StupidArtnet(ip_address, universe, PACKET_SIZE, fps, EVEN_PACKET_SIZE, BROADCAST))
         pentagon_senders[universe].start()
