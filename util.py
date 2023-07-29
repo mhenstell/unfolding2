@@ -46,11 +46,11 @@ def load_video_file(filename):
     # Open video file
     cap = cv2.VideoCapture(filename)
 
-    video_fps = cap.get(cv2.CAP_PROP_FPS),
-    total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-    print(f"Frames Per second: {video_fps } \nTotal Frames: {total_frames} \n Height: {height} \nWidth: {width}")
+    # video_fps = cap.get(cv2.CAP_PROP_FPS),
+    # total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    # height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    # width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    # print(f"Frames Per second: {video_fps } \nTotal Frames: {total_frames} \n Height: {height} \nWidth: {width}")
 
     return cap
 
