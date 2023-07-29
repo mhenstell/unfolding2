@@ -34,11 +34,14 @@ STRIPS_PER_PANEL = 16
 NUM_PANELS = 10
 
 # Color constants
-HUE_GREEN = 90
-LEAD_SAT = 255 # saturations that still look green to me range from 160-255
-LEAD_VAL = 255
-TRAIL_SAT = 255
-MAX_TRAIL_GREEN_VAL = 100
+# HUE_GREEN = 90
+# LEAD_SAT = 255 # saturations that still look green to me range from 160-255
+# LEAD_VAL = 255
+# TRAIL_SAT = 255
+# MAX_TRAIL_GREEN_VAL = 100
+
+LEAD_CHAR_COLOR = (0, 255, 0)
+TRAIL_CHAR_COLOR = (0, 200, 0)
 
 # animation constants
 MIN_DECAY = 2 #// 13/256 is about 5%
@@ -48,12 +51,6 @@ DECAY_RANGE = 10
 MAX_RESPAWN_DELAY = -10
 MIN_RESPAWN_DELAY = 0
 
-
-def hsv2rgb(h,s,v):
-    if v > 255: v = 255
-    elif v < 0: v = 0
-    t = tuple(round(i * 255) for i in colorsys.hsv_to_rgb(h/255,s/255,v/255))
-    return t
 
 class MatrixAnimation:
     def __init__(self):
@@ -103,13 +100,11 @@ class MatrixAnimation:
         for strand in range(NUM_PANEL_STRIPS):
             # Set lead char color
             char = self.lit_char[strand]
-            color = hsv2rgb(HUE_GREEN, LEAD_SAT, LEAD_VAL)
-            self._set_char_color(strand, char, color)
+            self._set_char_color(strand, char, LEAD_CHAR_COLOR)
 
             # Set trails
             char = self.lit_char[strand] - 1
-            color = hsv2rgb(HUE_GREEN, TRAIL_SAT, MAX_TRAIL_GREEN_VAL)
-            self._set_char_color(strand, char, color)
+            self._set_char_color(strand, char, TRAIL_CHAR_COLOR)
 
             # Set decay for rest of chars
             for char in range(CHARS_PER_PANEL_STRIP):
