@@ -10,6 +10,8 @@ PACKET_SIZE = 510
 COLOR_LOWLIGHT = (50, 50, 50)
 COLOR_BLACK = (0, 0, 0)
 
+STRIP_LENS = [29, 53, 77, 89, 95, 101, 107, 113, 29, 53, 77, 89, 95, 101, 107, 113]
+
 def create_artnet_pentagon_senders(universes, target_ips, fps):
     pentagon_senders = []
 

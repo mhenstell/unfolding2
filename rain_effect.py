@@ -2,24 +2,24 @@ import random
 import pygame
 import colorsys
 import time
-import math
-from stupidArtnet import StupidArtnet, StupidArtnetServer
-from util import led_to_packet, send_dmx
+import argparse
 
-# Advatek setup
-# Simulator
-target_ip = '127.0.0.1'
-target_ip2 = '127.0.0.1'
+from util import create_artnet_pentagon_senders, send_dmx
+from util import STRIP_LENS
 
-# Actual advatek
-# target_ip = '192.168.0.50'
-# target_ip2 = '192.168.0.51'
+# Output setup
+# Uncomment to use local Simulator
+target_ips = ['127.0.0.1', '127.0.0.1']
 
-packet_size = 510
-DMX_UNIVERSES = range(0, 80)
+# Uncomment to send data to two Advateks
+# may throw errors if both are not connected
+# target_ips = ['192.168.0.50', '192.168.0.51']
 
+# Defines
+DMX_UNIVERSES = range(0, 90)
+EDGE_START_UNIVERSE = 80
 
-# Pygame window
+# Preview window
 height = 620
 width = 2000
 
@@ -28,9 +28,8 @@ NUM_PANEL_STRIPS = 16 * 20
 LEDS_PER_PANEL_STRIP = 120
 PIXELS_PER_CHAR = 6
 CHARS_PER_PANEL_STRIP = LEDS_PER_PANEL_STRIP // PIXELS_PER_CHAR
-NUM_PANELS = 10
-LEDS_PER_PANEL = 1328
 STRIPS_PER_PANEL = 16
+NUM_PANELS = 10
 
 # Color constants
 HUE_GREEN = 120
@@ -47,16 +46,6 @@ DECAY_RANGE = 10
 MAX_RESPAWN_DELAY = -10
 MIN_RESPAWN_DELAY = 0
 
-FPS = 10
-
-led_data = [[(0, 0, 0) for _ in range(LEDS_PER_PANEL_STRIP)] for _ in range(NUM_PANEL_STRIPS)]
-strand_avg_decay = [random.randrange(MIN_DECAY, MAX_DECAY + 1) for _ in range(NUM_PANEL_STRIPS)]
-lit_char = [random.randrange(0, CHARS_PER_PANEL_STRIP) for _ in range(NUM_PANEL_STRIPS)]
-
-# lit_char = [0] * CHARS_PER_PANEL_STRIP * NUM_PANEL_STRIPS
-
-strip_lens = [29, 53, 77, 89, 95, 101, 107, 113, 29, 53, 77, 89, 95, 101, 107, 113]
-
 
 def hsv2rgb(h,s,v):
     if v > 255: v = 255
@@ -64,21 +53,87 @@ def hsv2rgb(h,s,v):
     t = tuple(round(i * 255) for i in colorsys.hsv_to_rgb(h/255,s/255,v/255))
     return t
 
-def fade_pixel_by(strand, pixel, value):
-    old = led_data[strand][pixel]
-    r = max(0, old[0] - value)
-    g = max(0, old[1] - value)
-    b = max(0, old[2] - value)
-    led_data[strand][pixel] = (r, g, b)
+class MatrixAnimation:
+    def __init__(self):
+        self.led_data = [[(0, 0, 0) for _ in range(LEDS_PER_PANEL_STRIP)] for _ in range(NUM_PANEL_STRIPS)]
+        self.strand_avg_decay = [random.randrange(MIN_DECAY, MAX_DECAY + 1) for _ in range(NUM_PANEL_STRIPS)]
+        self.lit_char = [random.randrange(0, CHARS_PER_PANEL_STRIP) for _ in range(NUM_PANEL_STRIPS)]
 
-def fade_char_by(strand, char, value):
-    for pixel in range(PIXELS_PER_CHAR - 1):
-        fade_pixel_by(strand, char * PIXELS_PER_CHAR + pixel, value)
+    def _set_pixel(self, strand, pixel, color):
+        self.led_data[strand][pixel] = color
 
-def set_pixel(strand, pixel, color):
-    led_data[strand][pixel] = color
+    def _set_char_color(self, strand, char, color):
+        if char < 0: return
+        if char >= CHARS_PER_PANEL_STRIP: return
+        for pixel in range(PIXELS_PER_CHAR - 1):
+            self._set_pixel(strand, char * PIXELS_PER_CHAR + pixel, color)
 
-def draw_leds(surface):
+    def _fade_pixel_by(self, strand, pixel, value):
+        old = self.led_data[strand][pixel]
+        r = max(0, old[0] - value)
+        g = max(0, old[1] - value)
+        b = max(0, old[2] - value)
+        self.led_data[strand][pixel] = (r, g, b)
+
+    def _fade_char_by(self, strand, char, value):
+        for pixel in range(PIXELS_PER_CHAR - 1):
+            self._fade_pixel_by(strand, char * PIXELS_PER_CHAR + pixel, value)
+
+    def _crop_leds(self, led_data):
+        # This is a total hack to crop the crop the pixels because
+        # we don't have as many output pixels as we do in the pattern here
+        # also I needed to flip some of them upside down because I'm bad at math
+        # please don't look at this
+        output = []
+
+        for panel in range(NUM_PANELS):
+            for strip in range(STRIPS_PER_PANEL):
+                for led in range(STRIP_LENS[strip]):
+                    if panel % 2 == 0:
+                        led = STRIP_LENS[strip] - led
+                    pix = led_data[(STRIPS_PER_PANEL * panel) + strip][led]
+                    output.append(pix)
+        return output
+
+    def get_frame(self, ticks=None):
+
+        # Set the LED states for each panel strip
+        for strand in range(NUM_PANEL_STRIPS):
+            # Set lead char color
+            char = self.lit_char[strand]
+            color = hsv2rgb(HUE_GREEN, LEAD_SAT, LEAD_VAL)
+            self._set_char_color(strand, char, color)
+
+            # Set trails
+            char = self.lit_char[strand] - 1
+            color = hsv2rgb(HUE_GREEN, TRAIL_SAT, MAX_TRAIL_GREEN_VAL)
+            self._set_char_color(strand, char, color)
+
+            # Set decay for rest of chars
+            for char in range(CHARS_PER_PANEL_STRIP):
+                char_decay = random.randrange(max(0, self.strand_avg_decay[strand] - DECAY_RANGE), self.strand_avg_decay[strand] + DECAY_RANGE + 1)
+                self._fade_char_by(strand, char, char_decay)
+
+            self.lit_char[strand] += 1
+            if self.lit_char[strand] == CHARS_PER_PANEL_STRIP + 5:
+                self.lit_char[strand] = random.randrange(MAX_RESPAWN_DELAY, MIN_RESPAWN_DELAY) 
+        
+        # Flatten the LED data into a 1D list for output to DMX
+        flat_list = []
+        for panel_strip in self.led_data:
+            for pixel in panel_strip:
+                flat_list.append(pixel)
+
+        # Crop the output and invert the bottom panels
+        output = self._crop_leds(flat_list)
+        return output
+
+    def get_raw_led_data(self):
+        return self.led_data
+
+
+def draw_leds(surface, led_data):
+    """ Draw the LEDs for the pygame preview window"""
     for strip_idx, strip in enumerate(led_data):
       x = (strip_idx * 15) + 5
 
@@ -88,94 +143,41 @@ def draw_leds(surface):
             color = led_data[strip_idx][led_idx]
             pygame.draw.circle(surface, color, (x, y), 1)
 
-def set_char_color(strand, char, color):
-    if char < 0: return
-    if char >= CHARS_PER_PANEL_STRIP: return
-    for pixel in range(PIXELS_PER_CHAR - 1):
-        set_pixel(strand, char * PIXELS_PER_CHAR + pixel, color)
-
-def make_it_rain(ticks):
-
-    for strand in range(NUM_PANEL_STRIPS):
-
-        # Set lead char color
-        char = lit_char[strand]
-        color = hsv2rgb(HUE_GREEN, LEAD_SAT, LEAD_VAL)
-        set_char_color(strand, char, color)
-
-        # Set trails
-        char = lit_char[strand] - 1
-        color = hsv2rgb(HUE_GREEN, TRAIL_SAT, MAX_TRAIL_GREEN_VAL)
-        set_char_color(strand, char, color)
-
-        # Set decay for rest of chars
-        for char in range(CHARS_PER_PANEL_STRIP):
-            char_decay = random.randrange(max(0, strand_avg_decay[strand] - DECAY_RANGE), strand_avg_decay[strand] + DECAY_RANGE + 1)
-            fade_char_by(strand, char, char_decay)
-
-        lit_char[strand] += 1
-        if lit_char[strand] == CHARS_PER_PANEL_STRIP + 5:
-            lit_char[strand] = random.randrange(MAX_RESPAWN_DELAY, MIN_RESPAWN_DELAY)
-
-def crop_leds(data):
-    # This is a total hack to crop the crop the pixels because
-    # we don't have as many output pixels as we do in the pattern here
-    # also I needed to flip some of them upside down because I'm bad at math
-    # please don't look at this
-    output = []
-
-    for panel in range(NUM_PANELS):
-        for strip in range(STRIPS_PER_PANEL):
-            for led in range(strip_lens[strip]):
-                if panel % 2 == 0:
-                    led = strip_lens[strip] - led
-                pix = data[(STRIPS_PER_PANEL * panel) + strip][led]
-                output.append(pix)
-    return output
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        prog='Unfolding Humanity Video Player',
+        description='This program reverse-projects a video file onto the LEDs on Unfolding Humanity')
+    parser.add_argument('-p', '--preview', action='store_true', help="Show a 2D preview of the movie")
+    parser.add_argument('--fps', default=15, help="Frames Per Second for the DMX output")
+    args = parser.parse_args()
 
-    senders = []
-    for universe in DMX_UNIVERSES:
-        if universe < 64:
-            senders.append(StupidArtnet(target_ip, universe, packet_size, 30, True, True))
-        else:
-            senders.append(StupidArtnet(target_ip2, universe, packet_size, 30, True, True))
-        senders[universe - DMX_UNIVERSES[0]].start()    
-    print(f"Created {len(senders)} DMX senders")
+    pentagon_senders = create_artnet_pentagon_senders(DMX_UNIVERSES[:EDGE_START_UNIVERSE], target_ips, int(args.fps))
+    # edge_senders = create_artnet_edge_senders(DMX_UNIVERSES[EDGE_START_UNIVERSE:], target_ips, int(args.fps))
 
     # Initialize pygame
     pygame.init()
-    screen = pygame.display.set_mode((width, height))
     clock = pygame.time.Clock()
-    running = True
-    ticks = 0
 
-    while running:
-        # poll for events
-        # pygame.QUIT event means the user clicked X to close your window
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
+    animation = MatrixAnimation()
 
-        # fill the screen with a color to wipe away anything from last frame
-        screen.fill("black")
+    if args.preview:
+        screen = pygame.display.set_mode((width, height))
 
-        make_it_rain(ticks)
-        draw_leds(screen)
+    while True:
 
-        # Send the DMX data
-        send_dmx(crop_leds(led_data), senders, DMX_UNIVERSES)
+        pygame.event.get()
 
-        pygame.display.flip()
+        led_data = animation.get_frame()
+        
+         # Send the DMX data
+        if len(led_data):
+            send_dmx(led_data, pentagon_senders, DMX_UNIVERSES[:EDGE_START_UNIVERSE])
 
-        clock.tick(FPS)
+        if args.preview:
+            screen.fill("black")
+            draw_leds(screen, animation.get_raw_led_data())
+            pygame.display.flip()
 
-        ticks += 1
-
-        # optional: if multicast was previously joined
-    print("Leaving DMX universes")
-    for listener in artnet_listeners:
-        del listener
-
+        clock.tick(args.fps)
